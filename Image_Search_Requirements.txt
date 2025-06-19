@@ -1,0 +1,12 @@
+git+https://github.com/openai/CLIP.git
+ftfy
+regex
+tqdm
+facenet-pytorch
+pillow-heif
+streamlit
+torch
+torchvision
+numpy
+matplotlib
+Pillow
