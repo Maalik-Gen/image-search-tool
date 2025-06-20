@@ -86,7 +86,10 @@ st.markdown("Text-Based Image Search with CLIP")
 query_input = st.text_input("Search Prompt", placeholder="e.g. people at dinner")
 search_button = st.button("Search")
 
-if search_button and query_input:
+# Trigger search if Enter was pressed (text changed) or button was clicked
+if query_input and (search_button or st.session_state.get("last_query") != query_input):
+    st.session_state["last_query"] = query_input  # Prevent rerun loop
+
     results_display = search_images_streamlit(query_input)
 
     if results_display:
@@ -108,5 +111,3 @@ if search_button and query_input:
                     file_name=filename.split("/")[-1],
                     mime="image/png"
                 )
-
-
