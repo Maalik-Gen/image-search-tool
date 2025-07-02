@@ -25,7 +25,7 @@ clip_model, preprocess_clip = clip.load("ViT-B/32", device=device)
 mtcnn = MTCNN(image_size=160, margin=0, device=device)
 facenet_model = InceptionResnetV1(pretrained="vggface2").eval().to(device)
 
-# FaceNet embeddings for known faces
+# ---------- Process known_faces ----------
 face_db = []
 for path in known_faces_path.rglob("*"):
     if path.suffix.lower() not in valid_exts or path.name.startswith("._"):
@@ -42,10 +42,32 @@ for path in known_faces_path.rglob("*"):
     except Exception as e:
         print(f"Face error: {path}: {e}")
 
+# ---------- Merge feedback data ----------
+feedback_path = base_path / "feedback_face_db.pkl"
+if feedback_path.exists():
+    try:
+        with open(feedback_path, "rb") as f:
+            feedback_data = pickle.load(f)
+        for query, entries in feedback_data.items():
+            for filename, face_img_tensor in entries:
+                try:
+                    face_tensor = face_img_tensor.unsqueeze(0).to(device)
+                    with torch.no_grad():
+                        embedding = facenet_model(face_tensor)
+                        embedding = embedding / embedding.norm(dim=-1, keepdim=True)
+                    face_db.append((f"feedback:{query}:{filename}", embedding.cpu()))
+                except Exception as e:
+                    print(f"Error with feedback face: {filename} — {e}")
+    except Exception as e:
+        print("Error loading feedback_face_db.pkl:", e)
+
+# Save merged face DB
 with open("face_db.pkl", "wb") as f:
     pickle.dump(face_db, f)
 
-# CLIP embeddings
+print(f"Saved combined face_db with {len(face_db)} entries.")
+
+# ---------- CLIP embeddings ----------
 image_embeddings = {}
 image_paths = [p for p in image_folder.rglob("*") if p.suffix.lower() in valid_exts and not p.name.startswith("._")]
 
@@ -63,9 +85,9 @@ for path in image_paths:
 with open("clip_embeddings.pkl", "wb") as f:
     pickle.dump(image_embeddings, f)
 
-print("Saved FaceNet and CLIP embeddings.")
+print("Saved CLIP image embeddings.")
 
-# Face matching (store known matches only)
+# ---------- Face matching ----------
 results = {}
 FACE_MATCH_THRESHOLD = 0.8
 
