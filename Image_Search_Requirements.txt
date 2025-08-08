@@ -1,12 +1,34 @@
+# CLIP (Text-Image Search)
 git+https://github.com/openai/CLIP.git
-ftfy
-regex
-tqdm
-facenet-pytorch
+ftfy==6.1.1
+regex==2023.12.25
+tqdm==4.67.1
+
+# Face Detection and Embedding
+facenet-pytorch==2.5.2
+torch==2.1.1
+torchvision==0.16.1
+numpy==1.26.4
+Pillow==10.2.0
+opencv-python==4.11.0.86
+
+# YOLOv8
+ultralytics==8.3.122
+
+# GFPGAN + dependencies (for optional face restoration)
+gfpgan==1.3.8
+basicsr==1.4.2
+facexlib==0.3.0
+filterpy==1.4.5
+lmdb==1.6.2
+scikit-image==0.21.0
+scikit-learn==1.3.2
+addict==2.4.0
+pyyaml==6.0.2
+
+# Streamlit UI
+streamlit==1.35.0
+
+# Misc (only if used in your code)
+matplotlib==3.8.4
 pillow-heif
-streamlit
-torch
-torchvision
-numpy
-matplotlib
-Pillow

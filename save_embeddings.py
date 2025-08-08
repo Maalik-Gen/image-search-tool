@@ -3,71 +3,41 @@ import clip
 from pathlib import Path
 from PIL import Image
 import pickle
-from facenet_pytorch import MTCNN, InceptionResnetV1
+import numpy as np
+from facenet_pytorch import InceptionResnetV1
+from ultralytics import YOLO
 from tqdm import tqdm
 
-# HEIC support
+print("Embedding generation")
+
 try:
     import pillow_heif
     pillow_heif.register_heif_opener()
 except ImportError:
-    print("pillow-heif not available — HEIC images may not load.")
+    pass
 
-# Setup
 device = "cpu"
 base_path = Path(__file__).resolve().parent
 image_folder = base_path / "Images_Test"
 known_faces_path = base_path / "known_faces"
 valid_exts = [".jpg", ".jpeg", ".png", ".heic", ".heif"]
 
-# Load models
-clip_model, preprocess_clip = clip.load("ViT-B/32", device=device)
-mtcnn = MTCNN(image_size=160, margin=0, device=device)
+clip_model, preprocess_clip = clip.load("ViT-B/16", device=device)
 facenet_model = InceptionResnetV1(pretrained="vggface2").eval().to(device)
+yolo_model = YOLO("yolov11l-face.pt")
 
-# ---------- Process known_faces ----------
-face_db = []
-for path in known_faces_path.rglob("*"):
-    if path.suffix.lower() not in valid_exts or path.name.startswith("._"):
-        continue
-    try:
-        img = Image.open(path).convert("RGB")
-        face_tensor = mtcnn(img)
-        if face_tensor is not None:
-            face_tensor = face_tensor.unsqueeze(0).to(device)
-            with torch.no_grad():
-                embedding = facenet_model(face_tensor)
-                embedding = embedding / embedding.norm(dim=-1, keepdim=True)
-            face_db.append((str(path), embedding.cpu()))
-    except Exception as e:
-        print(f"Face error: {path}: {e}")
+def get_face_crop(img):
+    results = yolo_model(img)
+    for result in results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            conf = box.conf[0].item()
+            if conf > 0.5:
+                face = img.crop((x1, y1, x2, y2)).resize((160, 160))
+                return face
+    return None
 
-# ---------- Merge feedback data ----------
-feedback_path = base_path / "feedback_face_db.pkl"
-if feedback_path.exists():
-    try:
-        with open(feedback_path, "rb") as f:
-            feedback_data = pickle.load(f)
-        for query, entries in feedback_data.items():
-            for filename, face_img_tensor in entries:
-                try:
-                    face_tensor = face_img_tensor.unsqueeze(0).to(device)
-                    with torch.no_grad():
-                        embedding = facenet_model(face_tensor)
-                        embedding = embedding / embedding.norm(dim=-1, keepdim=True)
-                    face_db.append((f"feedback:{query}:{filename}", embedding.cpu()))
-                except Exception as e:
-                    print(f"Error with feedback face: {filename} — {e}")
-    except Exception as e:
-        print("Error loading feedback_face_db.pkl:", e)
-
-# Save merged face DB
-with open("face_db.pkl", "wb") as f:
-    pickle.dump(face_db, f)
-
-print(f"Saved combined face_db with {len(face_db)} entries.")
-
-# ---------- CLIP embeddings ----------
+# CLIP embeddings
 image_embeddings = {}
 image_paths = [p for p in image_folder.rglob("*") if p.suffix.lower() in valid_exts and not p.name.startswith("._")]
 
@@ -79,42 +49,52 @@ for path in image_paths:
             embedding = clip_model.encode_image(img_tensor)
             embedding = embedding / embedding.norm(dim=-1, keepdim=True)
         image_embeddings[str(path.relative_to(image_folder))] = embedding.cpu()
-    except Exception as e:
-        print(f"CLIP error: {path}: {e}")
+    except Exception:
+        pass
 
 with open("clip_embeddings.pkl", "wb") as f:
     pickle.dump(image_embeddings, f)
 
-print("Saved CLIP image embeddings.")
+# FaceNet embeddings
+face_db = []
+known_face_paths = [p for p in known_faces_path.rglob("*") if p.suffix.lower() in valid_exts and not p.name.startswith("._")]
 
-# ---------- Face matching ----------
-results = {}
-FACE_MATCH_THRESHOLD = 0.8
-
-print("Matching test images with known faces...")
-for image_path in tqdm(image_paths):
+for path in tqdm(known_face_paths, desc="FaceNet embeddings"):
     try:
-        img = Image.open(image_path).convert("RGB")
-        face_tensor = mtcnn(img)
-        if face_tensor is None:
-            continue
-        face_tensor = face_tensor.unsqueeze(0).to(device)
-        with torch.no_grad():
-            test_embedding = facenet_model(face_tensor)
+        img = Image.open(path).convert("RGB")
+        face_crop = get_face_crop(img)
+        if face_crop is not None:
+            face_tensor = torch.tensor(np.array(face_crop)).permute(2, 0, 1).float() / 255.0
+            face_tensor = face_tensor.unsqueeze(0).to(device)
+            with torch.no_grad():
+                embedding = facenet_model(face_tensor)
+                embedding = embedding / embedding.norm(dim=-1, keepdim=True)
+            person_name = path.stem.lower().replace("_", " ").strip()
+            face_db.append((person_name, embedding.cpu()))
+    except Exception:
+        pass
 
-        best_match = None
-        best_dist = float("inf")
+with open("face_db.pkl", "wb") as f:
+    pickle.dump(face_db, f)
 
-        for known_path, known_emb in face_db:
-            dist = torch.norm(test_embedding - known_emb).item()
-            if dist < FACE_MATCH_THRESHOLD and dist < best_dist:
-                best_match = known_path
-                best_dist = dist
+# FaceNet embeddings for all images in Images_Test (to support face search)
+search_face_db = []
 
-        if best_match:
-            results[str(image_path.relative_to(image_folder))] = [(best_match, best_dist)]
+for path in tqdm(image_paths, desc="FaceNet embeddings for Images_Test"):
+    try:
+        img = Image.open(path).convert("RGB")
+        face_crop = get_face_crop(img)
+        if face_crop is not None:
+            face_tensor = torch.tensor(np.array(face_crop)).permute(2, 0, 1).float() / 255.0
+            face_tensor = face_tensor.unsqueeze(0).to(device)
+            with torch.no_grad():
+                embedding = facenet_model(face_tensor)
+                embedding = embedding / embedding.norm(dim=-1, keepdim=True)
+            search_face_db.append((str(path.relative_to(image_folder)), embedding.cpu()))
+    except Exception:
+        pass
 
-    except Exception as e:
-        print(f"Error processing {image_path}: {e}")
+with open("search_face_db.pkl", "wb") as f:
+    pickle.dump(search_face_db, f)
 
-print(f"Face matches found for {len(results)} images.")
+print(f"Saved {len(search_face_db)} face embeddings for Images_Test.")
