@@ -22,7 +22,7 @@ image_folder = base_path / "Images_Test"
 known_faces_path = base_path / "known_faces"
 valid_exts = [".jpg", ".jpeg", ".png", ".heic", ".heif"]
 
-clip_model, preprocess_clip = clip.load("ViT-B/16", device=device)
+clip_model, preprocess_clip = clip.load("ViT-L/14@336px", device=device)
 facenet_model = InceptionResnetV1(pretrained="vggface2").eval().to(device)
 yolo_model = YOLO("yolov11l-face.pt")
 

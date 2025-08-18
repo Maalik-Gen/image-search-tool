@@ -9,6 +9,7 @@ from PIL import ImageOps
 from PIL import Image
 from pathlib import Path
 
+
 try:
     pillow_heif.register_heif_opener()
 except ImportError:
@@ -48,8 +49,31 @@ if "last_query" not in st.session_state:
 
 if (query_input and (search_button or query_input != st.session_state["last_query"])):
     st.session_state["last_query"] = query_input
-    # Remove top_k, limit results after
-    all_results = search_engine.search_images(query_input, known_embeddings, known_names, image_folder)
+    query_lower = query_input.lower()
+    # Check if any known face name is in query
+    contains_face = any(name.lower() in query_lower for name in known_names)
+    # Check if query has other words (for activity/scene)
+    contains_scene = len(query_lower.split()) > 2 # more than just a face name
+    print(f"contains_face: {contains_face}, contains_scene: {contains_scene}")
+
+
+    # Decide which function to call
+    if contains_face and contains_scene:
+        all_results = search_engine.hybrid_search(
+            query_input,
+            known_embeddings,
+            known_names,
+            image_folder,
+            alpha=0.5,
+            top_k=12
+        )
+    else:
+        all_results = search_engine.search_images(
+            query_input,
+            known_embeddings,
+            known_names,
+            image_folder
+        )
     st.session_state["results"] = all_results[:12]
 
 if "results" in st.session_state:
