@@ -1,0 +1,43 @@
+# -------------------------------------------------------
+# GitHub Actions Workflow: Commit Alert
+# Sends an email notification whenever a new commit
+# is pushed to the specified branch.
+# -------------------------------------------------------
+
+name: Commit Alert
+
+on:
+  push:
+    branches:
+      - main  # Change this if you want to track a different branch, e.g., "dev" or "staging"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step: Send an email notification
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # SMTP server configuration for Outlook / Microsoft 365
+          server_address: smtp.office365.com     # Works for Outlook and Microsoft 365 (.co, .com, etc.)
+          server_port: 587                       # Use TLS (not SSL)
+
+          # Authentication credentials
+          # Store these as GitHub Actions secrets in your repository settings
+          username: ${{ secrets.EMAIL_USERNAME }}   # Example: yourname@company.co
+          password: ${{ secrets.EMAIL_PASSWORD }}   # App password or normal password (if MFA not enforced)
+
+          # Email content
+          subject: "New Commit Pushed to Repo"
+          body: |
+            A new commit has been pushed to the repository.
+
+            Commit message: ${{ github.event.head_commit.message }}
+            Author: ${{ github.event.head_commit.author.name }}
+            URL: ${{ github.event.head_commit.url }}
+
+          # Recipient and sender details
+          to: "qa-team@company.co"                    # Replace with your QA or team email
+          from: "Repo Alerts <${{ secrets.EMAIL_USERNAME }}>"  # Uses the same authenticated sender
