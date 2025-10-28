@@ -39,5 +39,5 @@ jobs:
             URL: ${{ github.event.head_commit.url }}
 
           # Recipient and sender details
-          to: "qa-team@company.co"                    # Replace with your QA or team email
+          to: "maalik.hemani@genetech.co"                    # Replace with your QA or team email
           from: "Repo Alerts <${{ secrets.EMAIL_USERNAME }}>"  # Uses the same authenticated sender

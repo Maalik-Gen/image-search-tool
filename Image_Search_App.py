@@ -9,7 +9,6 @@ from PIL import ImageOps
 from PIL import Image
 from pathlib import Path
 
-
 try:
     pillow_heif.register_heif_opener()
 except ImportError:
