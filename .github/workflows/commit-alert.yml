@@ -1,7 +1,8 @@
 # -------------------------------------------------------
 # GitHub Actions Workflow: Commit Alert
 # Sends an email notification whenever a new commit
-# is pushed to the specified branch.
+# is pushed to the specified branch, including details
+# like repo name, branch, author, and changed lines.
 # -------------------------------------------------------
 
 name: Commit Alert
@@ -9,35 +10,86 @@ name: Commit Alert
 on:
   push:
     branches:
-      - main  # Change this if you want to track a different branch, e.g., "dev" or "staging"
+      - main  # You can add others like "dev", "staging" if needed
 
 jobs:
   notify:
     runs-on: ubuntu-latest
 
     steps:
-      # Step: Send an email notification
+      # Step 1: Check out the repo so we can read commit details
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Step 2: Gather commit info (repo, branch, changes, etc.)
+      - name: Collect commit details
+        id: commit_info
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=${GITHUB_REF##*/}" >> $GITHUB_ENV
+          echo "COMMIT_MESSAGE=$(git log -1 --pretty=%B)" >> $GITHUB_ENV
+          echo "AUTHOR_NAME=$(git log -1 --pretty=%an)" >> $GITHUB_ENV
+          echo "COMMIT_URL=${{ github.event.head_commit.url }}" >> $GITHUB_ENV
+
+          # Basic file change summary
+          echo "CHANGES=$(git diff --stat HEAD~1 HEAD | head -n 50)" >> $GITHUB_ENV
+
+          # Detailed change info — file, start line, and surrounding function/class
+          LINE_SUMMARY=$(git diff -U0 --function-context HEAD~1 HEAD | \
+            awk '
+              /^\+\+\+/{file=$2}
+              /^@@/{
+                match($0, /\+([0-9]+)/, a);
+                line=a[1];
+                print file " — starts at line " line
+              }
+              /^ def /{
+                sub(/ *def /,"",$0);
+                print "   ↳ Function:" $0
+              }
+              /^ class /{
+                sub(/ *class /,"",$0);
+                print "   ↳ Class:" $0
+              }
+            ' | head -n 50)
+
+          # Escape newlines properly for GitHub env storage
+          LINE_SUMMARY="${LINE_SUMMARY//$'\n'/\\n}"
+          echo "LINE_SUMMARY=$LINE_SUMMARY" >> $GITHUB_ENV
+
+      # Step 3: Send email notification
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
           # SMTP server configuration for Outlook / Microsoft 365
-          server_address: smtp.office365.com     # Works for Outlook and Microsoft 365 (.co, .com, etc.)
-          server_port: 587                       # Use TLS (not SSL)
+          server_address: mail.genetech.co
+          server_port: 587
 
-          # Authentication credentials
-          # Store these as GitHub Actions secrets in your repository settings
-          username: ${{ secrets.EMAIL_USERNAME }}   # Example: yourname@company.co
-          password: ${{ secrets.EMAIL_PASSWORD }}   # App password or normal password (if MFA not enforced)
+          # Authentication credentials (stored as repository secrets)
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
 
           # Email content
-          subject: "New Commit Pushed to Repo"
+          subject: "New Commit in ${{ env.REPO_NAME }} [${{ env.BRANCH_NAME }}]"
           body: |
-            A new commit has been pushed to the repository.
+            🚨 **New Commit Alert**
 
-            Commit message: ${{ github.event.head_commit.message }}
-            Author: ${{ github.event.head_commit.author.name }}
-            URL: ${{ github.event.head_commit.url }}
+            **Repository:** ${{ env.REPO_NAME }}
+            **Branch:** ${{ env.BRANCH_NAME }}
+            **Author:** ${{ env.AUTHOR_NAME }}
+            **Commit Message:** ${{ env.COMMIT_MESSAGE }}
+            **Commit URL:** ${{ env.COMMIT_URL }}
+
+            **Changed Files:**
+            ```
+            ${{ env.CHANGES }}
+            ```
+
+            **Change Locations (first 50 lines):**
+            ```
+            ${{ env.LINE_SUMMARY }}
+            ```
 
           # Recipient and sender details
-          to: "maalik.hemani@genetech.co"                    # Replace with your QA or team email
-          from: "Repo Alerts <${{ secrets.EMAIL_USERNAME }}>"  # Uses the same authenticated sender
+          to: maalik.hemani@genetech.co
+          from: alarm@genetech.co
