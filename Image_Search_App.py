@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 
+
 try:
     pillow_heif.register_heif_opener()
 except ImportError:
