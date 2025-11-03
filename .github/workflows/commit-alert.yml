@@ -21,7 +21,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Step 2: Gather commit info (repo, branch, changes, etc.)
+            # Step 2: Gather commit info (repo, branch, changes, etc.)
       - name: Collect commit details
         id: commit_info
         run: |
@@ -34,7 +34,17 @@ jobs:
           # Basic file change summary
           echo "CHANGES=$(git diff --stat HEAD~1 HEAD | head -n 50)" >> $GITHUB_ENV
 
-          # Detailed change info — file, start line, and surrounding function/class
+          # Get first 10 actual changed lines (additions/removals) across files
+          DIFF_LINES=$(git diff -U0 HEAD~1 HEAD | \
+            grep -E "^\+|^-" | \
+            grep -vE "^\+\+\+|^---" | \
+            head -n 10)
+
+          # Escape newlines for GitHub environment
+          DIFF_LINES="${DIFF_LINES//$'\n'/\\n}"
+          echo "DIFF_LINES=$DIFF_LINES" >> $GITHUB_ENV
+
+          # Optional: include file and line summary context (kept for clarity)
           LINE_SUMMARY=$(git diff -U0 --function-context HEAD~1 HEAD | \
             awk '
               /^\+\+\+/{file=$2}
@@ -51,9 +61,7 @@ jobs:
                 sub(/ *class /,"",$0);
                 print "   ↳ Class:" $0
               }
-            ' | head -n 50)
-
-          # Escape newlines properly for GitHub env storage
+            ' | head -n 20)
           LINE_SUMMARY="${LINE_SUMMARY//$'\n'/\\n}"
           echo "LINE_SUMMARY=$LINE_SUMMARY" >> $GITHUB_ENV
 
@@ -71,7 +79,7 @@ jobs:
 
           # Email content
           subject: "New Commit in ${{ env.REPO_NAME }} [${{ env.BRANCH_NAME }}]"
-          body: |
+                    body: |
             🚨 **New Commit Alert**
 
             **Repository:** ${{ env.REPO_NAME }}
@@ -85,11 +93,16 @@ jobs:
             ${{ env.CHANGES }}
             ```
 
-            **Change Locations (first 50 lines):**
+            **Change Locations (first 20 lines):**
             ```
             ${{ env.LINE_SUMMARY }}
             ```
 
+            **First 10 Changed Lines (additions/removals):**
+            ```
+            ${{ env.DIFF_LINES }}
+            ```
+            
           # Recipient and sender details
           to: maalik.hemani@genetech.co
           from: alarm@genetech.co
