@@ -20,6 +20,8 @@ jobs:
       # Step 1: Check out the repo so we can read commit details
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Fetch at least 2 commits to compare
 
       # Step 2: Gather commit info (repo, branch, changes, etc.)
       - name: Collect commit details
@@ -31,43 +33,52 @@ jobs:
           echo "AUTHOR_NAME=$(git log -1 --pretty=%an)" >> $GITHUB_ENV
           echo "COMMIT_URL=${{ github.event.head_commit.url }}" >> $GITHUB_ENV
 
-          # Basic file change summary
-          echo "CHANGES<<EOF" >> $GITHUB_ENV
-          git diff --stat HEAD~1 HEAD | head -n 50 >> $GITHUB_ENV
+          # Get list of changed files
+          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
+          git diff --name-only HEAD~1 HEAD >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-          # Get first 10 changed lines (added/removed, excluding diff headers)
-          echo "DIFF_LINES<<EOF" >> $GITHUB_ENV
-          git diff -U0 HEAD~1 HEAD | grep -E "^\+|^-" | grep -vE "^\+\+\+|^---" | head -n 10 >> $GITHUB_ENV
+          # Get first 10 changed lines with file names
+          echo "CHANGED_LINES<<EOF" >> $GITHUB_ENV
+          git diff HEAD~1 HEAD | awk '
+            /^\+\+\+ b\// {
+              file = substr($0, 7);
+            }
+            /^[\+\-]/ && !/^[\+\-]{3}/ {
+              if (count < 10) {
+                print file ": " $0;
+                count++;
+              }
+            }
+          ' >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-          # Optional: line/function summary
-          echo "LINE_SUMMARY<<EOF" >> $GITHUB_ENV
-          git diff -U0 --function-context HEAD~1 HEAD | \
-            awk '
-              /^\+\+\+/{file=$2}
-              /^@@/{
-                match($0, /\+([0-9]+)/, a);
-                line=a[1];
-                print file " — starts at line " line
+          # Get change locations (file names with line numbers)
+          echo "CHANGE_LOCATIONS<<EOF" >> $GITHUB_ENV
+          git diff -U0 HEAD~1 HEAD | awk '
+            /^\+\+\+ b\// {
+              file = substr($0, 7);
+            }
+            /^@@/ {
+              match($0, /\+([0-9]+)(,([0-9]+))?/, arr);
+              line_start = arr[1];
+              line_count = arr[3] ? arr[3] : 1;
+              if (line_count == 1) {
+                print file " — line " line_start;
+              } else {
+                print file " — lines " line_start "-" (line_start + line_count - 1);
               }
-              /^ def /{
-                sub(/ *def /,"",$0);
-                print "   ↳ Function:" $0
-              }
-              /^ class /{
-                sub(/ *class /,"",$0);
-                print "   ↳ Class:" $0
-              }
-            ' | head -n 20 >> $GITHUB_ENV
+              count++;
+              if (count >= 20) exit;
+            }
+          ' >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-
 
       # Step 3: Send email notification
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
-          # SMTP server configuration for Outlook / Microsoft 365
+          # SMTP server configuration
           server_address: mail.genetech.co
           server_port: 587
 
@@ -88,17 +99,17 @@ jobs:
 
             **Changed Files:**
             ```
-            ${{ env.CHANGES }}
+            ${{ env.CHANGED_FILES }}
             ```
 
             **Change Locations (first 20 lines):**
             ```
-            ${{ env.LINE_SUMMARY }}
+            ${{ env.CHANGE_LOCATIONS }}
             ```
 
             **First 10 Changed Lines (additions/removals):**
             ```
-            ${{ env.DIFF_LINES }}
+            ${{ env.CHANGED_LINES }}
             ```
 
           # Recipient and sender details
