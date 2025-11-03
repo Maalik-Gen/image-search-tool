@@ -79,7 +79,7 @@ jobs:
 
           # Email content
           subject: "New Commit in ${{ env.REPO_NAME }} [${{ env.BRANCH_NAME }}]"
-                    body: |
+          body: |
             🚨 **New Commit Alert**
 
             **Repository:** ${{ env.REPO_NAME }}
@@ -102,7 +102,7 @@ jobs:
             ```
             ${{ env.DIFF_LINES }}
             ```
-            
+
           # Recipient and sender details
           to: maalik.hemani@genetech.co
           from: alarm@genetech.co
