@@ -38,22 +38,34 @@ jobs:
           git diff --name-only HEAD~1 HEAD >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-          # Get first 10 changed lines with file names
+          # Get first 10 changed lines with file names (formatted)
           echo "CHANGED_LINES<<EOF" >> $GITHUB_ENV
           git diff HEAD~1 HEAD | awk '
             /^\+\+\+ b\// {
               file = substr($0, 7);
             }
-            /^[\+\-]/ && !/^[\+\-]{3}/ {
+            /^[\+]/ && !/^[\+]{3}/ {
               if (count < 10) {
-                print file ": " $0;
+                line = substr($0, 2);
+                print "[" file "]";
+                print "  + " line;
+                print "";
+                count++;
+              }
+            }
+            /^[\-]/ && !/^[\-]{3}/ {
+              if (count < 10) {
+                line = substr($0, 2);
+                print "[" file "]";
+                print "  - " line;
+                print "";
                 count++;
               }
             }
           ' >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-          # Get change locations (file names with line numbers)
+          # Get change locations (file names with line numbers - formatted)
           echo "CHANGE_LOCATIONS<<EOF" >> $GITHUB_ENV
           git diff -U0 HEAD~1 HEAD | awk '
             /^\+\+\+ b\// {
@@ -64,10 +76,13 @@ jobs:
               line_start = arr[1];
               line_count = arr[3] ? arr[3] : 1;
               if (line_count == 1) {
-                print file " — line " line_start;
+                print "📄 " file;
+                print "   └─ Line " line_start;
               } else {
-                print file " — lines " line_start "-" (line_start + line_count - 1);
+                print "📄 " file;
+                print "   └─ Lines " line_start "-" (line_start + line_count - 1);
               }
+              print "";
               count++;
               if (count >= 20) exit;
             }

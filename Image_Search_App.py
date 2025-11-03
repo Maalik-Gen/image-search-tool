@@ -11,7 +11,7 @@ from pathlib import Path
 
 # Adding comments to this portion to see if the alert system works
 
-# Testing alert system with changes
+# Testing alert system for formatting changes
 
 # Alert System is working!!!
 
