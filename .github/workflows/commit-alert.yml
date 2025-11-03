@@ -21,7 +21,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-            # Step 2: Gather commit info (repo, branch, changes, etc.)
+      # Step 2: Gather commit info (repo, branch, changes, etc.)
       - name: Collect commit details
         id: commit_info
         run: |
@@ -32,20 +32,18 @@ jobs:
           echo "COMMIT_URL=${{ github.event.head_commit.url }}" >> $GITHUB_ENV
 
           # Basic file change summary
-          echo "CHANGES=$(git diff --stat HEAD~1 HEAD | head -n 50)" >> $GITHUB_ENV
+          echo "CHANGES<<EOF" >> $GITHUB_ENV
+          git diff --stat HEAD~1 HEAD | head -n 50 >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
-          # Get first 10 actual changed lines (additions/removals) across files
-          DIFF_LINES=$(git diff -U0 HEAD~1 HEAD | \
-            grep -E "^\+|^-" | \
-            grep -vE "^\+\+\+|^---" | \
-            head -n 10)
+          # Get first 10 changed lines (added/removed, excluding diff headers)
+          echo "DIFF_LINES<<EOF" >> $GITHUB_ENV
+          git diff -U0 HEAD~1 HEAD | grep -E "^\+|^-" | grep -vE "^\+\+\+|^---" | head -n 10 >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
-          # Escape newlines for GitHub environment
-          DIFF_LINES="${DIFF_LINES//$'\n'/\\n}"
-          echo "DIFF_LINES=$DIFF_LINES" >> $GITHUB_ENV
-
-          # Optional: include file and line summary context (kept for clarity)
-          LINE_SUMMARY=$(git diff -U0 --function-context HEAD~1 HEAD | \
+          # Optional: line/function summary
+          echo "LINE_SUMMARY<<EOF" >> $GITHUB_ENV
+          git diff -U0 --function-context HEAD~1 HEAD | \
             awk '
               /^\+\+\+/{file=$2}
               /^@@/{
@@ -61,9 +59,9 @@ jobs:
                 sub(/ *class /,"",$0);
                 print "   ↳ Class:" $0
               }
-            ' | head -n 20)
-          LINE_SUMMARY="${LINE_SUMMARY//$'\n'/\\n}"
-          echo "LINE_SUMMARY=$LINE_SUMMARY" >> $GITHUB_ENV
+            ' | head -n 20 >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
 
       # Step 3: Send email notification
       - name: Send email notification
