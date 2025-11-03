@@ -9,9 +9,10 @@ from PIL import ImageOps
 from PIL import Image
 from pathlib import Path
 
+# Adding comments to this portion to see if the alert system works
 
 
-
+# Alert System is working!!!
 
 try:
     pillow_heif.register_heif_opener()
