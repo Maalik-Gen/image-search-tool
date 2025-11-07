@@ -15,6 +15,8 @@ from pathlib import Path
 
 # Alert System is working!!!
 
+# Will it show the number of lines changed?
+
 try:
     pillow_heif.register_heif_opener()
 except ImportError:

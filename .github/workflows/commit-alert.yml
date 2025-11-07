@@ -1,8 +1,7 @@
 # -------------------------------------------------------
 # GitHub Actions Workflow: Commit Alert
 # Sends an email notification whenever a new commit
-# is pushed to the specified branch, including details
-# like repo name, branch, author, and changed lines.
+# is pushed to the specified branch, with a summary of changes.
 # -------------------------------------------------------
 
 name: Commit Alert
@@ -23,7 +22,7 @@ jobs:
         with:
           fetch-depth: 2  # Fetch at least 2 commits to compare
 
-      # Step 2: Gather commit info (repo, branch, changes, etc.)
+      # Step 2: Gather commit info (repo, branch, summary, etc.)
       - name: Collect commit details
         id: commit_info
         run: |
@@ -33,58 +32,16 @@ jobs:
           echo "AUTHOR_NAME=$(git log -1 --pretty=%an)" >> $GITHUB_ENV
           echo "COMMIT_URL=${{ github.event.head_commit.url }}" >> $GITHUB_ENV
 
-          # Get list of changed files
-          echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
-          git diff --name-only HEAD~1 HEAD >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          # Generate short summary like "3 files changed, 25 insertions(+), 8 deletions(-)"
+          SUMMARY=$(git diff --shortstat HEAD~1 HEAD)
+          echo "SUMMARY=$SUMMARY" >> $GITHUB_ENV
 
-          # Get first 10 changed lines with file names (formatted)
-          echo "CHANGED_LINES<<EOF" >> $GITHUB_ENV
-          git diff HEAD~1 HEAD | awk '
-            /^\+\+\+ b\// {
-              file = substr($0, 7);
-            }
-            /^[\+]/ && !/^[\+]{3}/ {
-              if (count < 10) {
-                line = substr($0, 2);
-                print "[" file "]";
-                print "  + " line;
-                print "";
-                count++;
-              }
-            }
-            /^[\-]/ && !/^[\-]{3}/ {
-              if (count < 10) {
-                line = substr($0, 2);
-                print "[" file "]";
-                print "  - " line;
-                print "";
-                count++;
-              }
-            }
-          ' >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-          # Get change locations (file names with line numbers - formatted)
-          echo "CHANGE_LOCATIONS<<EOF" >> $GITHUB_ENV
-          git diff -U0 HEAD~1 HEAD | awk '
-            /^\+\+\+ b\// {
-              file = substr($0, 7);
-            }
-            /^@@/ {
-              match($0, /\+([0-9]+)(,([0-9]+))?/, arr);
-              line_start = arr[1];
-              line_count = arr[3] ? arr[3] : 1;
-              if (line_count == 1) {
-                print "📄 " file;
-                print "   └─ Line " line_start;
-              } else {
-                print "📄 " file;
-                print "   └─ Lines " line_start "-" (line_start + line_count - 1);
-              }
-              print "";
-              count++;
-              if (count >= 20) exit;
+          # List top 5 changed files
+          echo "FILE_DETAILS<<EOF" >> $GITHUB_ENV
+          git diff --numstat HEAD~1 HEAD | awk '
+            NR <= 5 {
+              added=$1; removed=$2; file=$3;
+              printf "📄 %s — +%s / -%s\n", file, added, removed;
             }
           ' >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
@@ -112,19 +69,14 @@ jobs:
             **Commit Message:** ${{ env.COMMIT_MESSAGE }}
             **Commit URL:** ${{ env.COMMIT_URL }}
 
-            **Changed Files:**
+            **Summary of Changes:**
             ```
-            ${{ env.CHANGED_FILES }}
-            ```
-
-            **Change Locations (first 20 lines):**
-            ```
-            ${{ env.CHANGE_LOCATIONS }}
+            ${{ env.SUMMARY }}
             ```
 
-            **First 10 Changed Lines (additions/removals):**
+            **Top Changed Files (up to 5):**
             ```
-            ${{ env.CHANGED_LINES }}
+            ${{ env.FILE_DETAILS }}
             ```
 
           # Recipient and sender details
