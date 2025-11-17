@@ -113,3 +113,5 @@ if "results" in st.session_state:
                     )
         except Exception as e:
             print(f"Error displaying image {path}: {e}")
+
+            # Here is a test for the alert system
